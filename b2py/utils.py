@@ -13,17 +13,6 @@ def construct_url(base, endpoint):
   """
   return ''.join((base, endpoint))
 
-def read_file(file_name):
-  """Reads the bytes of a file.
-
-  Args:
-      file_name: The file to read.
-
-  Returns:
-      The bytes of the file.
-  """
-  with open(file_name, 'rb') as f:
-      return f.read()
 
 def sha1(contents):
   """

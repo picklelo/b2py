@@ -3,9 +3,11 @@ from requests.auth import HTTPBasicAuth
 
 from b2py import constants, utils
 
+
 class B2Error(Exception):
   """General exception type when interacting with the B2 API."""
   pass
+
 
 class B2(object):
   """Used to connect to and perform operations on a B2 account."""
@@ -133,29 +135,27 @@ class B2(object):
     data = response.json()
     self.upload_urls[bucket_id] = (data['uploadUrl'], data['authorizationToken'])
 
-  def upload_file(self, bucket_id, file_name, content_type=None):
+  def upload_file(self, bucket_id, file_name, contents, content_type=None):
     """Upload a file to a given bucket.
 
     Args:
       bucket_id: The bucket to put the file in.
-      file: The file to upload.
+      file_name: The name of the file in the object store.
+      contents: The file contents
       content_type: The value of the Content-Type header to send.
     """
     if bucket_id not in self.upload_urls:
       self._get_upload_url(bucket_id)
     upload_url, auth_token = self.upload_urls[bucket_id]
-    content = utils.read_file(file_name)
-    if content is None:
-      raise B2Error('Could not read file {0}'.format(file_name))
     headers = {
       'Authorization': auth_token,
       'X-Bz-File-Name': file_name,
       'Content-Type': content_type or 'b2/x-auto',
-      'Content-Length': str(len(content)),
-      'X-Bz-Content-Sha1': utils.sha1(content)
+      'Content-Length': str(len(contents)),
+      'X-Bz-Content-Sha1': utils.sha1(contents)
     }
     response = self._call(upload_url, method=post,
-                          headers=headers, requires_auth=False, data=content)
+                          headers=headers, requires_auth=False, data=contents)
     return response.json()
 
   def download_file(self, file_id, byte_range=None):
@@ -171,7 +171,7 @@ class B2(object):
     headers = {}
     if byte_range:
       start, end = byte_range
-      headers['Range'] = 'bytes={0}-1'.format(start, end)
+      headers['Range'] = 'bytes={0}-{1}'.format(start, end)
     body = {
       'fileId': file_id
     }
