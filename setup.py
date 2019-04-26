@@ -6,7 +6,7 @@ def read(file_name):
 
 setup(
   name='backblazeb2',
-  version='0.1.3',
+  version='0.1.4',
   description='Wrapper around the Backblaze B2 API',
   long_description=read('README.md'),
   url='https://github.com/picklelo/b2py',
