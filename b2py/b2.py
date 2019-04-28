@@ -1,4 +1,5 @@
 import json
+import time
 from requests import get, post
 from requests.auth import HTTPBasicAuth
 from threading import Thread
@@ -56,6 +57,7 @@ class B2:
             requires_auth: bool = True,
             method: Callable = get,
             num_retries: int = 3,
+            backoff_time: float = 0.5,
             **kwargs) -> Dict:
     """Makes a B2 API call and catches any errors.
 
@@ -67,6 +69,7 @@ class B2:
       requires_auth: Whether the request requires the user to be logged in.
       method: The type of request for the URL fetch.
       num_retries: The number of retries after receiving a 5xx error.
+      backoff_time: Time to wait between retries.
       kwargs: Any extra params to pass.
 
     Returns:
@@ -86,8 +89,9 @@ class B2:
 
     # Attempt to retry bad calls
     if response.status_code >= 500 and num_retries > 0:
+      time.sleep(backoff_time)
       return self._call(host, endpoint, headers, body, requires_auth, 
-                        method, num_retries - 1, **kwargs)
+                        method, num_retries - 1, backoff_time * 2, **kwargs)
 
     # Out of retries and we still have an error
     if response.status_code >= 400:
@@ -295,7 +299,8 @@ class B2:
                   bucket_id: str,
                   file_name: str,
                   contents: str,
-                  content_type: str = None) -> Dict:
+                  content_type: str = None,
+                  num_retries: int = 5) -> Dict:
     """Upload a file to a given bucket.
 
     Args:
@@ -311,22 +316,30 @@ class B2:
       return self._upload_large_file(bucket_id, file_name, contents,
                                      content_type)
 
-    if bucket_id not in self.upload_urls:
-      self._get_upload_url(bucket_id)
-    upload_url, auth_token = self.upload_urls[bucket_id]
-    headers = {
-        'Authorization': auth_token,
-        'X-Bz-File-Name': file_name,
-        'Content-Type': content_type or 'b2/x-auto',
-        'Content-Length': str(len(contents)),
-        'X-Bz-Content-Sha1': utils.sha1(contents)
-    }
-    response = self._call(upload_url,
-                          method=post,
-                          headers=headers,
-                          requires_auth=False,
-                          data=contents)
-    return response.json()
+    # If the upload fails, retry a few times with new auth tokens
+    for _ in range(num_retries):
+      if bucket_id not in self.upload_urls:
+        self._get_upload_url(bucket_id)
+      upload_url, auth_token = self.upload_urls[bucket_id]
+      headers = {
+          'Authorization': auth_token,
+          'X-Bz-File-Name': file_name,
+          'Content-Type': content_type or 'b2/x-auto',
+          'Content-Length': str(len(contents)),
+          'X-Bz-Content-Sha1': utils.sha1(contents)
+      }
+      try:
+        response = self._call(upload_url,
+                              method=post,
+                              headers=headers,
+                              requires_auth=False,
+                              data=contents,
+                              num_retries=0)
+        # Call succeded
+        return response.json()
+      except B2Error:
+        # Remove the cached upload url and auth token
+        del self.upload_urls[bucket_id]
 
   def download_file(self, file_id: str,
                     byte_range: Tuple[int, int] = None) -> str:
