@@ -339,7 +339,7 @@ class B2:
         return response.json()
       except B2Error:
         # Remove the cached upload url and auth token
-        del self.upload_urls[bucket_id]
+        self.upload_urls.pop(bucket_id, None)
 
   def download_file(self, file_id: str,
                     byte_range: Tuple[int, int] = None) -> str:
