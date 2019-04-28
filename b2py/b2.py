@@ -1,6 +1,7 @@
 import json
 from requests import get, post
 from requests.auth import HTTPBasicAuth
+from threading import Thread
 from typing import Callable, Dict, List, Tuple
 
 from b2py import constants, utils
@@ -54,6 +55,7 @@ class B2:
             body: Dict = {},
             requires_auth: bool = True,
             method: Callable = get,
+            num_retries: int = 3,
             **kwargs) -> Dict:
     """Makes a B2 API call and catches any errors.
 
@@ -64,6 +66,7 @@ class B2:
       body: Data to send in the body of the request.
       requires_auth: Whether the request requires the user to be logged in.
       method: The type of request for the URL fetch.
+      num_retries: The number of retries after receiving a 5xx error.
       kwargs: Any extra params to pass.
 
     Returns:
@@ -80,6 +83,13 @@ class B2:
     # Call the API
     url = utils.construct_url(host, endpoint)
     response = method(url, headers=headers, params=body, **kwargs)
+
+    # Attempt to retry bad calls
+    if response.status_code >= 500 and num_retries > 0:
+      return self._call(host, endpoint, headers, body, requires_auth, 
+                        method, num_retries - 1, **kwargs)
+
+    # Out of retries and we still have an error
     if response.status_code >= 400:
       raise B2Error(
           'Received status code {0} making request to url {1}. {2}'.format(
@@ -243,7 +253,9 @@ class B2:
     Args:
       bucket_id: The bucket to put the file in.
       file_name: The name of the file in the object store.
+      contents: The contents of the file.
       content_type: The value of the Content-Type header to send.
+      num_threads: How many threads to use to concurrently upload file parts.
 
     Returns:
       Information about the created large file.
@@ -257,11 +269,27 @@ class B2:
         contents[i * self.file_part_size:(i + 1) * self.file_part_size]
         for i in range(num_parts)
     ]
-    hashes = [
-        self._upload_large_file_part(file_id, i + 1, part)['contentSha1']
+
+    # Each worker uploads one part of the file and stores the content hash.
+    hashes = {}
+
+    def thread_worker(i, part):
+      hashes[i] = self._upload_large_file_part(file_id, i + 1,
+                                               part)['contentSha1']
+
+    # Launch threads in parallel
+    threads = [
+        Thread(target=thread_worker, args=(i, part))
         for i, part in enumerate(parts)
     ]
-    return self._finish_large_file_upload(file_id, hashes)
+    for thread in threads:
+      thread.start()
+    for thread in threads:
+      thread.join()
+
+    # Collect the hashes and finish the upload
+    content_hashes = [hashes[i] for i in range(len(parts))]
+    return self._finish_large_file_upload(file_id, content_hashes)
 
   def upload_file(self,
                   bucket_id: str,
