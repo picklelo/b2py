@@ -366,12 +366,14 @@ class B2:
   def list_files(self,
                  bucket_id: str,
                  start_file_id: str = None,
+                 start_file_name: str = None,
                  limit: int = None) -> List[Dict]:
     """List files in a bucket.
 
     Args:
       bucket_id: The bucket to search.
       start_file_id: Id of the first file to list from.
+      start_file_name: Name of the first file to list from.
       limit: The maximum number of files returned.
 
     Returns:
@@ -382,6 +384,8 @@ class B2:
     }
     if start_file_id:
       body['startFileId'] = start_file_id
+    if start_file_name:
+      body['startFileName'] = start_file_name
     if limit:
       body['maxFileCount'] = str(limit)
     response = self._call(self.api_url, '/b2_list_file_versions', body=body)
