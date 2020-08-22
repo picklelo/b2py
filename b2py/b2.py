@@ -90,8 +90,8 @@ class B2:
     # Attempt to retry bad calls
     if response.status_code >= 500 and num_retries > 0:
       time.sleep(backoff_time)
-      return self._call(host, endpoint, headers, body, requires_auth, 
-                        method, num_retries - 1, backoff_time * 2, **kwargs)
+      return self._call(host, endpoint, headers, body, requires_auth, method,
+                        num_retries - 1, backoff_time * 2, **kwargs)
 
     # Out of retries and we still have an error
     if response.status_code >= 400:
@@ -104,10 +104,11 @@ class B2:
   def _authorize(self):
     """Authorize the client to access the B2 account."""
     auth = HTTPBasicAuth(self.account_id, self.account_key)
-    response = self._call(constants.B2_API_BASE,
-                          '/b2_authorize_account',
-                          requires_auth=False,
-                          auth=auth)
+    response = self._call(
+        constants.B2_API_BASE,
+        '/b2_authorize_account',
+        requires_auth=False,
+        auth=auth)
     data = response.json()
     self.auth_token = data['authorizationToken']
     self.api_url = data['apiUrl'] + constants.B2_API_VERSION
@@ -222,11 +223,12 @@ class B2:
         'Content-Length': str(len(contents)),
         'X-Bz-Content-Sha1': utils.sha1(contents)
     }
-    response = self._call(upload_url,
-                          method=post,
-                          headers=headers,
-                          requires_auth=False,
-                          data=contents)
+    response = self._call(
+        upload_url,
+        method=post,
+        headers=headers,
+        requires_auth=False,
+        data=contents)
     return response.json()
 
   def _finish_large_file_upload(self, file_id: str, hashes: List[str]) -> Dict:
@@ -240,10 +242,8 @@ class B2:
       The file information.
     """
     body = json.dumps({'fileId': file_id, 'partSha1Array': hashes})
-    response = self._call(self.api_url,
-                          '/b2_finish_large_file',
-                          data=body,
-                          method=post)
+    response = self._call(
+        self.api_url, '/b2_finish_large_file', data=body, method=post)
     return response.json()
 
   def _upload_large_file(self,
@@ -329,19 +329,21 @@ class B2:
           'X-Bz-Content-Sha1': utils.sha1(contents)
       }
       try:
-        response = self._call(upload_url,
-                              method=post,
-                              headers=headers,
-                              requires_auth=False,
-                              data=contents,
-                              num_retries=0)
+        response = self._call(
+            upload_url,
+            method=post,
+            headers=headers,
+            requires_auth=False,
+            data=contents,
+            num_retries=0)
         # Call succeded
         return response.json()
       except B2Error:
         # Remove the cached upload url and auth token
         self.upload_urls.pop(bucket_id, None)
 
-  def download_file(self, file_id: str,
+  def download_file(self,
+                    file_id: str,
                     byte_range: Tuple[int, int] = None) -> str:
     """Downloads a file.
 
@@ -357,10 +359,11 @@ class B2:
       start, end = byte_range
       headers['Range'] = 'bytes={0}-{1}'.format(start, end)
     body = {'fileId': file_id}
-    response = self._call(self.download_url,
-                          '/b2api/v1/b2_download_file_by_id',
-                          headers=headers,
-                          body=body)
+    response = self._call(
+        self.download_url,
+        '/b2api/v1/b2_download_file_by_id',
+        headers=headers,
+        body=body)
     return response.content
 
   def list_files(self,
